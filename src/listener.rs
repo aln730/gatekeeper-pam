@@ -1,4 +1,3 @@
-pub use gatekeeper_core::RealmType;
 use gatekeeper_core::{GatekeeperReader, NfcTag, Realm, RealmType, UndifferentiatedTag};
 use reqwest::header::AUTHORIZATION;
 use reqwest::StatusCode;
@@ -53,7 +52,7 @@ impl<'a> GateKeeperMemberListener<'a> {
         })
     }
 
-    pub fn poll_for_tag(&mut self) -> Option<UndifferentiatedTag> {
+    pub fn poll_for_tag(&mut self) -> Option<UndifferentiatedTag<'_>> {
         let nearby_tags = self.nfc_device.get_nearby_tags();
         if nearby_tags.is_empty() {
             self.just_scanned = false;

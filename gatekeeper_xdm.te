@@ -1,0 +1,9 @@
+module gatekeeper_xdm 1.0;
+
+require {
+    type xdm_t;
+    type usbtty_device_t;
+    class chr_file { open read write ioctl getattr setattr lock append };
+}
+
+allow xdm_t usbtty_device_t:chr_file { open read write ioctl getattr setattr lock append };

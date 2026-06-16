@@ -2,11 +2,9 @@
 
 mod config;
 mod listener;
-
+mod daemon;
 use config::Config;
-use listener::{GateKeeperMemberListener, parse_uid};
 use libc::c_int;
-
 include!(concat!(env!("OUT_DIR"), "/pam.rs"));
 
 const PAM_SUCCESS: c_int = 0;
@@ -21,65 +19,55 @@ pub unsafe extern "C" fn pam_sm_authenticate(
     _argc: c_int,
     _argv: *const *const libc::c_char,
 ) -> c_int {
-    // Load config
+    let pamh_addr = pamh as usize;
+    std::panic::catch_unwind(|| authenticate_inner(pamh_addr as *mut pam_handle_t)).unwrap_or_else(|_| {
+        eprintln!("pam_gatekeeper: panic during authentication");
+        PAM_SERVICE_ERROR
+    })
+}
+
+fn authenticate_inner(pamh: *mut pam_handle_t) -> c_int {
     let config = match Config::load() {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("pam_gatekeeper: {}", e);
+            eprintln!("pam_gatekeeper: {e}");
             return PAM_SERVICE_ERROR;
         }
     };
 
-    //Get PAM_USER (VERY IMPORTANT FOR EVERYTHING!!!!)
+    // (VERY IMPORTANT FOR EVERYTHING!!!!)
     let mut username_ptr: *const libc::c_char = std::ptr::null();
-    if unsafe { pam_get_user(pamh, &mut username_ptr, std::ptr::null()) } != PAM_SUCCESS
-        || username_ptr.is_null()
+    if unsafe { pam_get_user(pamh, &mut username_ptr, std::ptr::null()) } != PAM_SUCCESS || username_ptr.is_null()
     {
         return PAM_AUTH_ERROR;
     }
-    let pam_user = match  unsafe { std::ffi::CStr::from_ptr(username_ptr) }.to_str() {
+    let pam_user = match unsafe { std::ffi::CStr::from_ptr(username_ptr) }.to_str() {
         Ok(s) => s.to_owned(),
         Err(_) => return PAM_AUTH_ERROR,
     };
-
-    //Chom Listener
-    let mut listener = match GateKeeperMemberListener::new(&config) {
-        Some(l) => l,
-        None => {
-            eprintln!("failed to open NFC device");
-            return PAM_IGNORE;
+    
+    //Ask gatekeeperd to wait for a tap
+    match listener::wait_for_user(config.nfc_timeout_secs) {
+        Ok(Some(uid)) if uid == pam_user => {
+            eprintln!("gatekeeperd: tap resolved uid '{uid}'");
+            PAM_SUCCESS
         }
-    };
-
-    //Wait for card tap
-    let key = match listener.wait_for_user(config.nfc_timeout_secs) {
-        Some(k) => k,
-        None => return PAM_IGNORE,
-    };
-
-    //Fetch user from gatekeeper
-    let value = match listener.fetch_user(key) {
-        Ok(v) => v,
-        Err(_) => {
-            eprintln!("fetch failed");
-            return PAM_IGNORE;
-        }
-    };
-
-    //Compare uid to PAM_USER
-    match parse_uid(&value) {
-        Some(uid) if uid == pam_user => PAM_SUCCESS,
-        Some(uid) => {
-            eprintln!("id mismatch: '{}' != '{}'", uid, pam_user);
+        Ok(Some(uid)) => {
+            eprintln!("gatekeeperd: id mismatch: '{uid}' != '{pam_user}'");
             PAM_AUTH_ERROR
         }
-        None => {
-            eprintln!("could not parse uid from response");
+        Ok(None) => {
+            eprintln!("gatekeeperd: no tap within timeout"); //meh, i wanna get rid of this
+            PAM_IGNORE
+        }
+        Err(e) => {
+            eprintln!("gateekeperd: daemon error: {e:?}");
             PAM_IGNORE
         }
     }
 }
 
+//pam stuff
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn pam_sm_setcred(
     _pamh: *mut pam_handle_t,
@@ -119,3 +107,4 @@ pub unsafe extern "C" fn pam_sm_acct_mgmt(
 ) -> c_int {
     PAM_SUCCESS
 }
+//trust me

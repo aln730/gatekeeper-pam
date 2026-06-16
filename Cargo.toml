@@ -17,3 +17,7 @@ toml = "0.5"
 
 [build-dependencies]
 bindgen = "0.72.1"
+
+[[bin]]
+name = "gatekeeperd"
+path = "src/bin/gatekeeperd.rs"

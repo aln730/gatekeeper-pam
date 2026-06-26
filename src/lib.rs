@@ -21,9 +21,9 @@ pub unsafe extern "C" fn pam_sm_authenticate(
 ) -> c_int {
     let pamh_addr = pamh as usize;
     std::panic::catch_unwind(|| authenticate_inner(pamh_addr as *mut pam_handle_t)).unwrap_or_else(|_| {
-        eprintln!("pam_gatekeeper: panic during authentication");
-        PAM_SERVICE_ERROR
-    })
+            eprintln!("pam_gatekeeper: panic during authentication");
+            PAM_SERVICE_ERROR
+        })
 }
 
 fn authenticate_inner(pamh: *mut pam_handle_t) -> c_int {
@@ -45,24 +45,25 @@ fn authenticate_inner(pamh: *mut pam_handle_t) -> c_int {
         Ok(s) => s.to_owned(),
         Err(_) => return PAM_AUTH_ERROR,
     };
-    
-    //Ask gatekeeperd to wait for a tap
-    match listener::wait_for_user(config.nfc_timeout_secs) {
-        Ok(Some(uid)) if uid == pam_user => {
-            eprintln!("gatekeeperd: tap resolved uid '{uid}'");
-            PAM_SUCCESS
-        }
-        Ok(Some(uid)) => {
-            eprintln!("gatekeeperd: id mismatch: '{uid}' != '{pam_user}'");
-            PAM_AUTH_ERROR
-        }
-        Ok(None) => {
-            eprintln!("gatekeeperd: no tap within timeout"); //meh, i wanna get rid of this
-            PAM_IGNORE
-        }
-        Err(e) => {
-            eprintln!("gateekeperd: daemon error: {e:?}");
-            PAM_IGNORE
+
+    loop {
+        match listener::wait_for_user(config.nfc_poll_chunk_secs) {
+            Ok(Some(uid)) if uid == pam_user => {
+                eprintln!("gatekeeperd: tap resolved uid '{uid}'");
+                return PAM_SUCCESS
+            }
+            Ok(Some(uid)) => {
+                eprintln!("gatekeeperd: id mismatch: '{uid}' != '{pam_user}', retrying");
+                continue;
+            }
+            Ok(None) => {
+                // chunk timed out
+                continue;
+            }
+            Err(e) => {
+                eprintln!("gatekeeperd: daemon error: {e:?}");
+                return PAM_IGNORE;
+            }
         }
     }
 }

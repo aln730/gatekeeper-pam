@@ -1,24 +1,66 @@
-name: Security Audit
-
+name: CI
 on:
+  workflow_dispatch:
+  pull_request:
   push:
     branches: [main, master]
-    paths:
-      - '**/Cargo.toml'
-      - '**/Cargo.lock'
-      - '.github/workflows/audit.yml'
-  pull_request:
-    paths:
-      - '**/Cargo.toml'
-      - '**/Cargo.lock'
-  schedule:
-    - cron: '0 6 * * 1'
 
 jobs:
-  audit:
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: rustsec/audit-check@v2
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: clippy
+      - run: cargo clippy -- -D warnings
+
+  fmt:
+    name: Code Style
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+      - uses: actions-rust-lang/rustfmt@v1
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+      - name: Install build dependencies
+        run: sudo apt-get install -y libpam0g-dev libclang-dev libnfc-dev
+      - name: Build
+        run: cargo build --release
+      - name: Upload PAM module
+        uses: actions/upload-artifact@v4
+        with:
+          name: pam-module
+          path: target/release/libgatekeeper_pam.so
+      - name: Upload daemon
+        uses: actions/upload-artifact@v4
+        with:
+          name: gatekeeperd
+          path: target/release/gatekeeperd
+
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          ignore: RUSTSEC-2025-0134
+
+#thanks mstrodl for the inspiration

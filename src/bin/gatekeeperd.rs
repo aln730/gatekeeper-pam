@@ -13,7 +13,6 @@ use daemon::{DaemonResponse, SOCKET_PATH};
 
 struct PendingTap {
     uid: String,
-    seen_at: Instant,
 }
 
 struct Shared {
@@ -21,40 +20,41 @@ struct Shared {
     tap_ready: Condvar,
 }
 
-const TAP_FRESHNESS_WINDOW: Duration = Duration::from_secs(3);
-
 fn main() {
-let config = Config::load().unwrap_or_else(|e| {
-eprintln!("gatekeeperd: {e}");
-std::process::exit(1);
-});
+    let config = Config::load().unwrap_or_else(|e| {
+        eprintln!("gatekeeperd: {e}");
+        std::process::exit(1);
+    });
 
-let shared = Arc::new(Shared {
-tp: Mutex::new(None),
-tap_ready: Condvar::new(),
-});
+    let shared = Arc::new(Shared {
+        tp: Mutex::new(None),
+        tap_ready: Condvar::new(),
+    });
 
 // Create the reader INSIDE the spawned thread
-{
-let shared = Arc::clone(&shared);
-std::thread::spawn(move || { poll_loop(config, shared);});
-}
+    {
+        let shared = Arc::clone(&shared);
+        std::thread::spawn(move || poll_loop(config, shared));
+    }
 
-let _ = std::fs::create_dir_all("/run/gatekeeperd");
-let _ = std::fs::remove_file(SOCKET_PATH);
-let listener = UnixListener::bind(SOCKET_PATH).unwrap_or_else(|e| {eprintln!("gatekeeperd: failed to bind {SOCKET_PATH}: {e}");
-std::process::exit(1);
-});
-let _ = std::fs::set_permissions(SOCKET_PATH, std::os::unix::fs::PermissionsExt::from_mode(0o666),);
+    let _ = std::fs::create_dir_all("/run/gatekeeperd");
+    let _ = std::fs::remove_file(SOCKET_PATH);
+    let listener = UnixListener::bind(SOCKET_PATH).unwrap_or_else(|e| {eprintln!("gatekeeperd: failed to bind {SOCKET_PATH}: {e}");
+        std::process::exit(1);
+    });
+    let _ = std::fs::set_permissions(SOCKET_PATH, std::os::unix::fs::PermissionsExt::from_mode(0o666),);
 
-eprintln!("gatekeeperd: listening on {SOCKET_PATH}");
+    eprintln!("gatekeeperd: listening on {SOCKET_PATH}");
 
-for stream in listener.incoming() {
-match stream {
-Ok(stream) => handle_client(stream, &shared),
-Err(e) => eprintln!("gatekeeperd: accept error: {e}"),
-}
-}
+    for stream in listener.incoming() {
+        match stream {
+            Ok(stream) => {
+                let shared = Arc::clone(&shared);
+                std::thread::spawn(move || handle_client(stream, &shared));
+            }
+            Err(e) => eprintln!("gatekeeperd: accept error: {e}"),
+        }
+    }
 }
 
 fn poll_loop(config: Config, shared: Arc<Shared>) {
@@ -103,20 +103,13 @@ fn poll_loop(config: Config, shared: Arc<Shared>) {
                         // IMPORTANT: only accept one tap at a time
                         if tp.is_none() {
                             eprintln!("gatekeeperd: tap resolved uid '{uid}'");
-
-                            *tp = Some(PendingTap {
-                                uid,
-                                seen_at: Instant::now(),
-                            });
-
+                            *tp = Some(PendingTap {uid});
                             shared.tap_ready.notify_all();
                         }
                     }
-
                     Ok(None) => {
                         eprintln!("gatekeeperd: tap authenticated but uid lookup failed");
                     }
-
                     Err(e) => {
                         eprintln!("gatekeeperd: fetch error: {e}");
                     }
@@ -173,30 +166,23 @@ fn parse_wait_request(line: &str) -> Option<u64> {
 
 //this is like... idk what to say
 fn wait_for_tap(shared: &Arc<Shared>, timeout: Duration) -> DaemonResponse {
-    let call_started = Instant::now();
-    let deadline = call_started + timeout;
+    let deadline = Instant::now() + timeout;
 
     let mut tp = shared.tp.lock().unwrap();
     loop {
-        if let Some(tap) = tp.as_ref()
-            && tap.seen_at >= call_started && tap.seen_at.elapsed() <= TAP_FRESHNESS_WINDOW {
-                let uid = tap.uid.clone();
-                *tp = None;
-                return DaemonResponse::Ok(uid);
-            }
+        if let Some(tap) = tp.take() {
+            return DaemonResponse::Ok(tap.uid);
+        }
 
         let now = Instant::now();
         if now >= deadline {
             return DaemonResponse::Timeout;
         }
 
-        let (guard, timeout_result) = shared
+        let (guard, _) = shared
             .tap_ready
             .wait_timeout(tp, deadline - now)
             .unwrap();
         tp = guard;
-        if timeout_result.timed_out() && tp.is_none() {
-            return DaemonResponse::Timeout;
-        }
     }
 }

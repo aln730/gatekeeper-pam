@@ -1,5 +1,9 @@
 ## Gatekeeper PAM
-A Linux PAM module enabling NFC-based authentication.
+A Linux PAM module enabling NFC-based authentication using the Gatekeeper API
+- Centralized Authentication: identity resolved via LDAP-backed lookup, no per-machine config files
+- Daemon/Socket Architecture: gatekeeperd holds exclusive control of the NFC hardware and API calls. The PAM module only talks to it over a socket
+- DESFire AES-128 mutual authentication, not raw UID matching
+- SELinux + Systemd Hardened: serial device policy at lock screen, hardened service unit (WIP)
 
 ### Requirements:
 - Linux with PAM

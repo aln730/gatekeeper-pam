@@ -45,7 +45,7 @@ fn main() {
     });
     let _ = std::fs::set_permissions(
         SOCKET_PATH,
-        std::os::unix::fs::PermissionsExt::from_mode(0o666),
+        std::os::unix::fs::PermissionsExt::from_mode(0o660),
     );
 
     eprintln!("gatekeeperd: listening on {SOCKET_PATH}");
@@ -122,6 +122,8 @@ fn poll_loop(config: Config, shared: Arc<Shared>) {
                             eprintln!("gatekeeperd: tap resolved uid '{uid}'");
                             *tp = Some(PendingTap { uid });
                             shared.tap_ready.notify_all();
+                            drop(tp);
+                            std::thread::sleep(Duration::from_secs(1));
                         }
                     }
                     Ok(None) => {

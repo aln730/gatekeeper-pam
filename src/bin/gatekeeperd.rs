@@ -4,10 +4,10 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-#[path = "../daemon.rs"]
-mod daemon;
 #[path = "../config.rs"]
 mod config;
+#[path = "../daemon.rs"]
+mod daemon;
 use config::Config;
 use daemon::{DaemonResponse, SOCKET_PATH};
 
@@ -31,7 +31,7 @@ fn main() {
         tap_ready: Condvar::new(),
     });
 
-// Create the reader INSIDE the spawned thread
+    // Create the reader INSIDE the spawned thread
     {
         let shared = Arc::clone(&shared);
         std::thread::spawn(move || poll_loop(config, shared));
@@ -39,10 +39,14 @@ fn main() {
 
     let _ = std::fs::create_dir_all("/run/gatekeeperd");
     let _ = std::fs::remove_file(SOCKET_PATH);
-    let listener = UnixListener::bind(SOCKET_PATH).unwrap_or_else(|e| {eprintln!("gatekeeperd: failed to bind {SOCKET_PATH}: {e}");
+    let listener = UnixListener::bind(SOCKET_PATH).unwrap_or_else(|e| {
+        eprintln!("gatekeeperd: failed to bind {SOCKET_PATH}: {e}");
         std::process::exit(1);
     });
-    let _ = std::fs::set_permissions(SOCKET_PATH, std::os::unix::fs::PermissionsExt::from_mode(0o666),);
+    let _ = std::fs::set_permissions(
+        SOCKET_PATH,
+        std::os::unix::fs::PermissionsExt::from_mode(0o666),
+    );
 
     eprintln!("gatekeeperd: listening on {SOCKET_PATH}");
 
@@ -60,18 +64,31 @@ fn main() {
 fn poll_loop(config: Config, shared: Arc<Shared>) {
     let realm = Realm::new(
         RealmType::MemberProjects,
-        config.gk_realm_member_projects_auth_key.clone().into_bytes(),
-        config.gk_realm_member_projects_read_key.clone().into_bytes(),
+        config
+            .gk_realm_member_projects_auth_key
+            .clone()
+            .into_bytes(),
+        config
+            .gk_realm_member_projects_read_key
+            .clone()
+            .into_bytes(),
         config.gk_realm_member_projects_public_key.as_bytes(),
-        config.gk_realm_member_projects_mobile_crypt_private_key.as_bytes(),
-        config.gk_realm_member_projects_mobile_private_key.as_bytes(),
+        config
+            .gk_realm_member_projects_mobile_crypt_private_key
+            .as_bytes(),
+        config
+            .gk_realm_member_projects_mobile_private_key
+            .as_bytes(),
         None,
     );
 
     let mut reader = match GatekeeperReader::new(config.nfc_device.clone(), realm) {
         Some(r) => r,
         None => {
-            eprintln!("gatekeeperd: failed to open NFC device {}", config.nfc_device);
+            eprintln!(
+                "gatekeeperd: failed to open NFC device {}",
+                config.nfc_device
+            );
             return;
         }
     };
@@ -103,7 +120,7 @@ fn poll_loop(config: Config, shared: Arc<Shared>) {
                         // IMPORTANT: only accept one tap at a time
                         if tp.is_none() {
                             eprintln!("gatekeeperd: tap resolved uid '{uid}'");
-                            *tp = Some(PendingTap {uid});
+                            *tp = Some(PendingTap { uid });
                             shared.tap_ready.notify_all();
                         }
                     }
@@ -179,10 +196,7 @@ fn wait_for_tap(shared: &Arc<Shared>, timeout: Duration) -> DaemonResponse {
             return DaemonResponse::Timeout;
         }
 
-        let (guard, _) = shared
-            .tap_ready
-            .wait_timeout(tp, deadline - now)
-            .unwrap();
+        let (guard, _) = shared.tap_ready.wait_timeout(tp, deadline - now).unwrap();
         tp = guard;
     }
 }

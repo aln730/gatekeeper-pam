@@ -1,8 +1,8 @@
 #![allow(non_camel_case_types)]
 
 mod config;
-mod listener;
 mod daemon;
+mod listener;
 use config::Config;
 use libc::c_int;
 include!(concat!(env!("OUT_DIR"), "/pam.rs"));
@@ -12,6 +12,8 @@ const PAM_AUTH_ERROR: c_int = 7;
 const PAM_SERVICE_ERROR: c_int = 3;
 const PAM_IGNORE: c_int = 25;
 
+/// # Safety
+/// Called by PAM. `_pamh` must be a valid PAM handle.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn pam_sm_authenticate(
     pamh: *mut pam_handle_t,
@@ -20,10 +22,12 @@ pub unsafe extern "C" fn pam_sm_authenticate(
     _argv: *const *const libc::c_char,
 ) -> c_int {
     let pamh_addr = pamh as usize;
-    std::panic::catch_unwind(|| authenticate_inner(pamh_addr as *mut pam_handle_t)).unwrap_or_else(|_| {
+    std::panic::catch_unwind(|| authenticate_inner(pamh_addr as *mut pam_handle_t)).unwrap_or_else(
+        |_| {
             eprintln!("pam_gatekeeper: panic during authentication");
             PAM_SERVICE_ERROR
-        })
+        },
+    )
 }
 
 fn authenticate_inner(pamh: *mut pam_handle_t) -> c_int {
@@ -37,7 +41,8 @@ fn authenticate_inner(pamh: *mut pam_handle_t) -> c_int {
 
     // (VERY IMPORTANT FOR EVERYTHING!!!!)
     let mut username_ptr: *const libc::c_char = std::ptr::null();
-    if unsafe { pam_get_user(pamh, &mut username_ptr, std::ptr::null()) } != PAM_SUCCESS || username_ptr.is_null()
+    if unsafe { pam_get_user(pamh, &mut username_ptr, std::ptr::null()) } != PAM_SUCCESS
+        || username_ptr.is_null()
     {
         return PAM_AUTH_ERROR;
     }
@@ -50,7 +55,7 @@ fn authenticate_inner(pamh: *mut pam_handle_t) -> c_int {
         match listener::wait_for_user(config.nfc_poll_chunk_secs) {
             Ok(Some(uid)) if uid == pam_user => {
                 eprintln!("gatekeeperd: tap resolved uid '{uid}'");
-                return PAM_SUCCESS
+                return PAM_SUCCESS;
             }
             Ok(Some(uid)) => {
                 eprintln!("gatekeeperd: id mismatch: '{uid}' != '{pam_user}', retrying");
@@ -69,6 +74,9 @@ fn authenticate_inner(pamh: *mut pam_handle_t) -> c_int {
 }
 
 //pam stuff
+
+/// # Safety
+/// Called by PAM. `_pamh` must be a valid PAM handle.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn pam_sm_setcred(
     _pamh: *mut pam_handle_t,
@@ -79,6 +87,8 @@ pub unsafe extern "C" fn pam_sm_setcred(
     PAM_SUCCESS
 }
 
+/// # Safety
+/// Called by PAM. `_pamh` must be a valid PAM handle.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn pam_sm_open_session(
     _pamh: *mut pam_handle_t,
@@ -89,6 +99,8 @@ pub unsafe extern "C" fn pam_sm_open_session(
     PAM_SUCCESS
 }
 
+/// # Safety
+/// Called by PAM. `_pamh` must be a valid PAM handle.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn pam_sm_close_session(
     _pamh: *mut pam_handle_t,
@@ -99,6 +111,8 @@ pub unsafe extern "C" fn pam_sm_close_session(
     PAM_SUCCESS
 }
 
+/// # Safety
+/// Called by PAM. `_pamh` must be a valid PAM handle.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn pam_sm_acct_mgmt(
     _pamh: *mut pam_handle_t,

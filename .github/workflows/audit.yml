@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: sudo apt-get install -y libpam0g-dev libclang-dev libnfc-dev
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
@@ -27,29 +29,6 @@ jobs:
           toolchain: stable
       - uses: actions-rust-lang/rustfmt@v1
 
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-      - name: Install build dependencies
-        run: sudo apt-get install -y libpam0g-dev libclang-dev libnfc-dev
-      - name: Build
-        run: cargo build --release
-      - name: Upload PAM module
-        uses: actions/upload-artifact@v4
-        with:
-          name: pam-module
-          path: target/release/libgatekeeper_pam.so
-      - name: Upload daemon
-        uses: actions/upload-artifact@v4
-        with:
-          name: gatekeeperd
-          path: target/release/gatekeeperd
-
   audit:
     name: Security Audit
     runs-on: ubuntu-latest
@@ -62,5 +41,3 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ignore: RUSTSEC-2025-0134
-
-#thanks mstrodl for the inspiration

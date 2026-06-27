@@ -2,7 +2,7 @@
 use std::io::{self, BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
-
+//lowk might get rid of wire later
 //big brain
 pub const SOCKET_PATH: &str = "/run/gatekeeperd/gatekeeperd.sock";
 

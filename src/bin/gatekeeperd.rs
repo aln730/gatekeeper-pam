@@ -61,6 +61,7 @@ fn main() {
     }
 }
 
+//nfc polling
 fn poll_loop(config: Config, shared: Arc<Shared>) {
     let realm = Realm::new(
         RealmType::MemberProjects,
@@ -123,7 +124,7 @@ fn poll_loop(config: Config, shared: Arc<Shared>) {
                             *tp = Some(PendingTap { uid });
                             shared.tap_ready.notify_all();
                             drop(tp);
-                            std::thread::sleep(Duration::from_secs(1));
+                            std::thread::sleep(Duration::from_secs(3));
                         }
                     }
                     Ok(None) => {
@@ -166,6 +167,12 @@ fn handle_client(stream: UnixStream, shared: &Arc<Shared>) {
     let mut line = String::new();
     if reader.read_line(&mut line).unwrap_or(0) == 0 {
         return;
+    }
+
+    // Flush any stale tap to avoid pending
+    {
+        let mut tp = shared.tp.lock().unwrap();
+        *tp = None;
     }
 
     let response = match parse_wait_request(&line) {

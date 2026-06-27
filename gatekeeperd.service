@@ -1,0 +1,21 @@
+[Unit]
+Description=gatekeeprd
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/gatekeeperd
+Restart=on-failure
+RestartSec=2s
+
+RuntimeDirectory=gatekeeperd
+RuntimeDirectoryMode=0770
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=gatekeeperd
+
+[Install]
+WantedBy=multi-user.target
+
+#Prolly should add security for daemon and stuff

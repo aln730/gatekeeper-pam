@@ -25,3 +25,11 @@ A Linux PAM module enabling NFC-based authentication using the Gatekeeper API
 - - Edit ``/etc/pam.d/gdm-password`` and add the module as ``sufficient`` (or whichever service you want to protect)
 - If SELinux is enforcing denials, create a single policy module granting permissions needed for serial device access (WIP for a better solution)
 - X11 only: disable DPMS
+
+### Limitations:
+- Needs internet for uid lookup (Can fallback to password authentication. Keys could be cached in the future)
+
+### To-Do
+- Find a secure workaround for keyring
+- Make it even more easier to setup the stuff using a script
+- Maybe offline mode

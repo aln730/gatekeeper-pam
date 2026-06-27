@@ -18,7 +18,7 @@ pub struct Config {
 }
 
 fn default_chunk() -> u64 {
-    86400
+    20
 }
 
 impl Config {

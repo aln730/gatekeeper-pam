@@ -64,7 +64,7 @@ fn main() {
 //nfc polling
 fn poll_loop(config: Config, shared: Arc<Shared>) {
     let realm = Realm::new(
-        RealmType::MemeberProjects,
+        RealmType::MemberProjects,
         config
             .gk_realm_member_projects_auth_key
             .clone()

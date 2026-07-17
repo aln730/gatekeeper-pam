@@ -83,17 +83,18 @@ fn poll_loop(config: Config, shared: Arc<Shared>) {
         None,
     );
 
-    let mut reader = match GatekeeperReader::new(config.nfc_device.clone(), realm) {
-        Some(r) => r,
-        None => {
-            eprintln!(
-                "gatekeeperd: failed to open NFC device {}",
-                config.nfc_device
-            );
-            return;
+    let mut reader = loop {
+        match GatekeeperReader::new(config.nfc_device.clone(), realm.clone()) {
+            Some(r) => break r,
+            None => {
+                eprintln!(
+                    "gatekeeperd: failed to open NFC device {}",
+                    config.nfc_device
+                );
+                std::thread::sleep(Duration::from_secs(2));
+            }
         }
     };
-
     let http = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(5))
         .build()
